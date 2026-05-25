@@ -96,8 +96,10 @@ python main.py
 For continuous execution during market hours, the bot can be deployed on a VPS server.
 
 ---
+
 ## 🔄 Trading System Workflow
 
+```text
         SmartAPI
             │
             ▼
@@ -131,7 +133,7 @@ For continuous execution during market hours, the bot can be deployed on a VPS s
             ▼
        Trade Logging
       trade_data.json
-
+```
 ---
 
 ## 🚧 Future Enhancements
