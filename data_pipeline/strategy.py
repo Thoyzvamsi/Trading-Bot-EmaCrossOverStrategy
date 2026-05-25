@@ -8,7 +8,7 @@ class Strategy:
         trade = {}
         trade_on = 0
         
-
+        # --- while Loop will be Runed every 60 secs to check the latest candles ---
         while True:
             data_path,client = data_side.check_latest(raw_data_path,client,symbol_token,credentials)
             data = pd.read_csv(data_path)
@@ -18,12 +18,14 @@ class Strategy:
 
             if quntity > 0:
                 print("Waiting for a trade....")
-                
+
+                # --- Entry Plan ---
                 if data["Position"].iloc[-1] == 2 and trade_on == 0:
                     entry = data["Close"].iloc[-1]
                     Entry_Date = data["Date"].iloc[-1]
                     trade_on = 1
 
+                    #placing Buy order
                     orderparams = {
                             "variety": "NORMAL",
                             "tradingsymbol": symbol,
@@ -38,12 +40,13 @@ class Strategy:
                         }
                     client.placeOrder(orderparams)
                     
-
-                elif (data["Position"].iloc[-1] == -2 or (data["Close"] - entry) <= capital * -0.01) and trade_on == 1:
+                # --- Exit Plan ---
+                elif data["Position"].iloc[-1] == -2 and trade_on == 1:
                     Exit_Date = data["Date"].iloc[-1]
                     exit = data["Close"].iloc[-1]
                     trade_on = 0
 
+                    #Placing Sell order 
                     orderparams = {
                             "variety": "NORMAL",
                             "tradingsymbol": symbol,
@@ -67,20 +70,23 @@ class Strategy:
                         "Quantity" : quntity
                     }
 
+                    # --- Storing trade data in a Json file ---
                     trade_data = Strategy.load_data("trade_data.json")
                     trade_data.append(trade)
 
                     with open("trade_data.json","w") as f:
                         json.dump(trade_data ,f, indent=4)
                     
-
             time.sleep(60)
 
+
+    # --- Calculating Charges ---
     def charges_calulation(entry, exit, qnt ,market_type):
         charges = 0
         brokerage = 5
+
         if market_type == 0:
-            #Brokerage
+            # ---Brokerage---
             if brokerage > 0.1 * (entry*qnt):
                 charges += 10
             elif (0.1 * (entry*qnt)) < 20:
@@ -88,11 +94,13 @@ class Strategy:
             else:
                 charges += 40
 
-            #Dp charges
+            # ---Dp charges---
             charges += 20 + (0.18*20)
-            #STT (Gov tax)
+
+            # ---STT (Gov tax)---
             charges += (0.01*entry) + (0.01*exit)
-            #Stamp duty
+
+            # ---Stamp duty---
             charges += 0.00015*entry*qnt
 
             if (exit - entry)*0.0325 > 0:
@@ -101,7 +109,8 @@ class Strategy:
             return charges
         
         if market_type == 1:
-            #Brokerage
+
+            # ---Brokerage---
             if brokerage > 0.1 * (entry*qnt):
                 charges += 5*2 
             elif 0.1 * (entry*qnt) < 20:
@@ -109,14 +118,14 @@ class Strategy:
             else:
                 charges += 20
 
-            #STT
-            #charges += 0.025*exit
+            # --- STT ---
             charges += 0.00003*entry*qnt
             if ((exit - entry)*qnt)*0.0325 > 0:
                 ((exit - entry)*qnt)*0.0325
 
             return charges
-         
+
+    # --- Loading the previous trade data ---  
     def load_data(file_name):
         try:
             with open(file_name, "r") as f:

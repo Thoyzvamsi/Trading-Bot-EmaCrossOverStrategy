@@ -1,61 +1,151 @@
 # EMA Crossover Trading Bot (Python)
 
-A rule-based trading bot that generates buy/sell signals using a dual EMA crossover strategy and evaluates performance through backtesting.
+A modular rule-based trading bot built using Python and SmartAPI that automates market data collection, signal generation, and trade execution using an EMA crossover strategy.
+
+The project was designed to simulate a structured trading pipeline instead of relying on unorganized scripts. It separates data collection, preprocessing, strategy logic, and execution into independent modules for easier testing and future scalability.
 
 ---
 
 ## 🚀 Overview
 
-This project implements a structured trading pipeline:
+This trading system follows a complete pipeline:
 
-- Market data collection (SmartAPI)
-- Indicator calculation (EMA 14 & EMA 50)
-- Signal generation
+- Fetches live and historical market data using SmartAPI
+- Preprocesses and structures raw market data
+- Calculates EMA-based indicators
+- Generates buy/sell signals
+- Executes trades automatically
+- Stores trade logs for tracking performance
 
-The goal was to build a clean and testable trading system instead of unstructured scripts.
-
----
-
-## 🧠 Strategy Logic
-
-This bot uses a **trend-following EMA crossover strategy**.
-
-**Indicators Used:**
-- EMA 14 (short-term trend)
-- EMA 50 (long-term trend)
-
-**Entry Conditions:**
-- Buy when EMA 14 crosses above EMA 50 (Golden Cross)
-
-**Exit Conditions:**
-- Sell when EMA 14 crosses below EMA 50 (Death Cross)
+The strategy currently focuses on trend-following momentum using a dual EMA crossover model on 15-minute candles.
 
 ---
 
-## 📊 Backtest Results
+## 🧠 Current Strategy Structure
 
-- Back tested this strategy before Building A trading Bot
+The bot uses a **dual EMA crossover strategy**:
 
-**Stock:** Canara Bank  
-**Period:** 5 Years  
-**Total Trades:** 469  
+- **EMA 14** → Short-term trend direction
+- **EMA 50** → Long-term trend direction
 
-| Metric            | Value |
-|------------------|------|
-| Win Rate         | 29.27% |
-| Avg Win          | ₹402.05 |
-| Avg Loss         | ₹-120.85 |
-| Max Drawdown     | -21.24% |
-| Profit Factor    | 1.38 |
-| Sharpe Ratio     | 0.55 |
-| Total Returns    | ₹15,027 |
+### Entry Logic
+- Buy when EMA 14 crosses above EMA 50  
+  *(Golden Cross)*
+
+### Exit Logic
+- Sell when EMA 14 crosses below EMA 50  
+  *(Death Cross)*
+
+The strategy continuously checks for the latest candle data every 60 seconds and updates signals dynamically.
 
 ---
 
-### 🧠 Interpretation
+## 📁 Project Structure
 
-- Low win rate (~29%) but profitable due to **higher average wins vs losses**
-- Profit Factor > 1 → Strategy is profitable
-- Drawdown (~21%) is moderate → risk needs improvement
-- Sharpe Ratio is low → returns are not very efficient
+```bash
+TRADING-BOT/
+│
+├── data/
+│   └── normal_data/
+│       ├── raw_data.csv        # Raw historical market data
+│       └── prep_data.csv       # Processed data with indicators/signals
+│
+├── data_pipeline/
+│   ├── data_prep.py            # Data preprocessing & feature generation
+│   └── strategy.py             # Trading strategy and execution logic
+│
+├── logs/                       # Runtime logs
+│
+├── src/
+│   └── source.py               # SmartAPI session & market data handling
+│
+├── main.py                     # Main execution file
+│
+└── README.md
+```
 
+---
+
+## ⚙️ How To Use
+
+### Setup
+
+- Clone the repository
+- Install required dependencies
+- Add your SmartAPI credentials inside `main.py`
+- Add the stock symbol and token you want to trade
+
+Example:
+
+```
+symbol = "SBIN-EQ"
+symbol_token = "3045"
+credentials = [
+    "API_KEY",
+    "CLIENT_ID",
+    "PASSWORD",
+    "TOTP_SECRET"
+]
+```
+
+Run the bot using:
+```bash
+python main.py
+```
+
+For continuous execution during market hours, the bot can be deployed on a VPS server.
+
+---
+## 🔄 Trading System Workflow
+
+        SmartAPI
+            │
+            ▼
+   Market Data Collection
+        (source.py)
+            │
+            ▼
+     Raw Data Storage
+      raw_data.csv
+            │
+            ▼
+    Data Preprocessing
+      (data_prep.py)
+            │
+            ▼
+   EMA Indicator Creation
+      EMA 14 & EMA 50
+            │
+            ▼
+     Signal Generation
+   Buy / Sell Conditions
+            │
+            ▼
+    Strategy Execution
+      (strategy.py)
+            │
+            ▼
+      Order Placement
+        BUY / SELL
+            │
+            ▼
+       Trade Logging
+      trade_data.json
+
+---
+
+## 🚧 Future Enhancements
+
+- Add custom strategies inside `strategy.py`
+- Add feature engineering and indicators inside `data_prep.py`
+- Implement Stop Loss and Risk Management
+- Add Streamlit dashboard for live monitoring
+- Add Telegram or Email trade alerts
+- Support multiple stocks simultaneously
+
+---
+
+## ⚠️ Disclaimer
+
+This project is built for educational and research purposes only.  
+It should not be considered financial advice or a guarantee of profitability.

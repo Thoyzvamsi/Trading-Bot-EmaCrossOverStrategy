@@ -6,8 +6,7 @@ from dateutil.relativedelta import relativedelta
 from data_pipeline.data_prep import Data_preparation
 
 class Client_side:
-    #Creates session and return client and refresh token
-    #(we need refresh token inoreder to reconnect the session)
+    # --- Creates session and return client and refresh token ---
     def create_session(credentials):
         api_key = credentials[0]
         client_id = credentials[1]
@@ -26,7 +25,7 @@ class Client_side:
 
         return client,refreshToken
     
-    #reconnecting the session, if it expired
+    # --- Reconnecting the session, if it was expired ---
     def refresh_session(client,refreshToken):
         data = client.generateSession(refreshToken)
         client.setAccessToken(data["data"]["jwtToken"])
@@ -35,7 +34,7 @@ class Client_side:
 
 
 class data_side:
-    #loading 3 months data in before hand to calculate moving averages
+    # --- loading 3 months data to calculate moving averages ---
     def data_loading(client,symbol,symbol_token,credentials,refreshToken):
 
         now = datetime.now()
@@ -53,7 +52,7 @@ class data_side:
             "todate": to_date
         }
 
-        #We have to check the response
+        # --- Checking the reponse ---
         candles , client , refreshToken = data_side.check_API_reponse(params,client,refreshToken,credentials)
 
         df = pd.DataFrame(
@@ -61,14 +60,14 @@ class data_side:
             columns=["datetime", "open", "high", "low", "close", "volume"]
         )
 
-        raw_data_path = "data/normal_data/raw_data.csv"
+        raw_data_path = "data/raw_data.csv"
         df.to_csv(raw_data_path)
 
         return raw_data_path, client, refreshToken
     
 
     
-    #Checking if API response vaild or not
+    # --- Checking if API response vaild or not---
     def check_API_reponse(params,client,refreshToken,credentials):
         try:
             candles = client.getCandleData(params)
@@ -78,7 +77,7 @@ class data_side:
 
             return candles, client, refreshToken
 
-        # Refresh token
+        # --- if response is not vaild Refresh the session ---
         except Exception as e:
             print("API failed → trying refresh...")
 
@@ -93,7 +92,7 @@ class data_side:
                 print("Session refreshed successfully")
                 return candles, client, refreshToken
 
-            # Full login Relogin 
+            # --- if Refresh doesn't solve the problem, Reloging again ---
             except Exception as e:
                 print("Refresh failed → logging in again...")
 
@@ -105,7 +104,7 @@ class data_side:
                 return candles, client, refreshToken
             
 
-    # Load the raw data and concate it with new candle       
+    # --- Load the new candle and concate it with Raw data ---
     def check_latest(raw_data_path,client,symbol_token,credentials,refreshToken):
         raw_data = pd.read_csv(raw_data_path)
 
@@ -128,14 +127,14 @@ class data_side:
             columns=["datetime", "open", "high", "low", "close", "volume"]
         )
 
-        #if last row time matches to the last row time of raw data then skip if not concate them
+        # --- Skip the concate if last candle matches ---
         if last_candle[0] == raw_data["datetime"].iloc[-1]:
-            prep_data_path = "data/normal_data/prep_data.csv"
+            prep_data_path = "data/prep_data.csv"
             return prep_data_path,client
         
         else:
             raw_data = pd.concat([raw_data,new_row],ignore_index=True)
-            raw_data.to_csv("data/normal_data/raw_data.csv")
-            prep_data_path = Data_preparation.preparation("data/normal_data/raw_data.csv")
+            raw_data.to_csv("data/raw_data.csv")
+            prep_data_path = Data_preparation.preparation("data/raw_data.csv")
                 
             return prep_data_path,client,refreshToken
