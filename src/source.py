@@ -1,10 +1,13 @@
 import pandas as pd
 from SmartApi import SmartConnect
 import pyotp
-from datetime import datetime
+from datetime import datetime,timedelta
 from dateutil.relativedelta import relativedelta
+from data_pipeline.data_prep import Data_preparation
 
-class Get_data:
+class Client_side:
+    #Creates session and return client and refresh token
+    #(we need refresh token inoreder to reconnect the session)
     def create_session(credentials):
         api_key = credentials[0]
         client_id = credentials[1]
@@ -23,12 +26,16 @@ class Get_data:
 
         return client,refreshToken
     
+    #reconnecting the session, if it expired
     def refresh_session(client,refreshToken):
-        
         data = client.generateSession(refreshToken)
         client.setAccessToken(data["data"]["jwtToken"])
         return client
+    
 
+
+class data_side:
+    #loading 3 months data in before hand to calculate moving averages
     def data_loading(client,symbol,symbol_token,credentials,refreshToken):
 
         now = datetime.now()
@@ -46,23 +53,89 @@ class Get_data:
             "todate": to_date
         }
 
-        try:
-            candles = client.getCandleData(params)
-        except Exception as e:
-            print("Refreshing session")
-            try:
-                client = Get_data.refresh_session(client,refreshToken)
-                candles = client.getCandleData(params)
-            except:
-                client,refreshToken = Get_data.create_session(credentials)
-                candles = client.getCandleData(params)
-
+        #We have to check the response
+        candles , client , refreshToken = data_side.check_API_reponse(params,client,refreshToken,credentials)
 
         df = pd.DataFrame(
             candles["data"],
             columns=["datetime", "open", "high", "low", "close", "volume"]
         )
 
-        df.to_csv("data/normal_data/raw_data.csv")
+        raw_data_path = "data/normal_data/raw_data.csv"
+        df.to_csv(raw_data_path)
 
-        return "data/normal_data/raw_data.csv", client,refreshToken
+        return raw_data_path, client, refreshToken
+    
+
+    
+    #Checking if API response vaild or not
+    def check_API_reponse(params,client,refreshToken,credentials):
+        try:
+            candles = client.getCandleData(params)
+
+            if not candles or not candles.get("data"):
+                raise Exception("Invalid API response")
+
+            return candles, client, refreshToken
+
+        # Refresh token
+        except Exception as e:
+            print("API failed → trying refresh...")
+
+            try:
+                client, refreshToken = Client_side.refresh_session(client, refreshToken)
+
+                candles = client.getCandleData(params)
+
+                if not candles or not candles.get("data"):
+                    raise Exception("Invalid after refresh")
+
+                print("Session refreshed successfully")
+                return candles, client, refreshToken
+
+            # Full login Relogin 
+            except Exception as e:
+                print("Refresh failed → logging in again...")
+
+                client, refreshToken = Client_side.create_session(credentials)
+
+                candles = client.getCandleData(params)
+
+                print("New session created")
+                return candles, client, refreshToken
+            
+
+    # Load the raw data and concate it with new candle       
+    def check_latest(raw_data_path,client,symbol_token,credentials,refreshToken):
+        raw_data = pd.read_csv(raw_data_path)
+
+        now = datetime.now()
+        start = now - timedelta(minutes=60)
+
+        params = {
+                "exchange": "NSE",
+                "symboltoken": symbol_token,
+                "interval": "FIFTEEN_MINUTE",
+                "fromdate": start.strftime("%Y-%m-%d %H:%M"),
+                "todate": now.strftime("%Y-%m-%d %H:%M")
+            }
+        
+        candles , client , refreshToken = data_side.check_API_reponse(params,client,refreshToken,credentials)
+        last_candle = candles["data"][-1]
+
+        new_row = pd.DataFrame(
+            [last_candle],
+            columns=["datetime", "open", "high", "low", "close", "volume"]
+        )
+
+        #if last row time matches to the last row time of raw data then skip if not concate them
+        if last_candle[0] == raw_data["datetime"].iloc[-1]:
+            prep_data_path = "data/normal_data/prep_data.csv"
+            return prep_data_path,client
+        
+        else:
+            raw_data = pd.concat([raw_data,new_row],ignore_index=True)
+            raw_data.to_csv("data/normal_data/raw_data.csv")
+            prep_data_path = Data_preparation.preparation("data/normal_data/raw_data.csv")
+                
+            return prep_data_path,client,refreshToken

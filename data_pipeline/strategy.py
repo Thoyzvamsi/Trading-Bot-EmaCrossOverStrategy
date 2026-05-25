@@ -1,17 +1,16 @@
 import pandas as pd
 import time
-from src.source import Get_data
-from datetime import datetime,timedelta
-from data_pipeline.data_prep import Data_preparation
+from src.source import data_side
 import json
 
 class Strategy:
-    def strategy_execution(raw_data_path,quntity,credentials,client,symbol,symbol_token):
+    def strategy_execution(raw_data_path,quntity,credentials,client,symbol,symbol_token,capital):
         trade = {}
         trade_on = 0
+        
 
         while True:
-            data_path,client = Strategy.check_latest(raw_data_path,client,symbol_token,credentials)
+            data_path,client = data_side.check_latest(raw_data_path,client,symbol_token,credentials)
             data = pd.read_csv(data_path)
 
             if len(data) < 3:
@@ -20,7 +19,7 @@ class Strategy:
             if quntity > 0:
                 print("Waiting for a trade....")
                 
-                if data["Position"].iloc[-1] == 2 and data["Position"].iloc[-2] == -2 and trade_on == 0:
+                if data["Position"].iloc[-1] == 2 and trade_on == 0:
                     entry = data["Close"].iloc[-1]
                     Entry_Date = data["Date"].iloc[-1]
                     trade_on = 1
@@ -40,7 +39,7 @@ class Strategy:
                     client.placeOrder(orderparams)
                     
 
-                elif data["Position"].iloc[-1] == -2 and trade_on == 1:
+                elif (data["Position"].iloc[-1] == -2 or (data["Close"] - entry) <= capital * -0.01) and trade_on == 1:
                     Exit_Date = data["Date"].iloc[-1]
                     exit = data["Close"].iloc[-1]
                     trade_on = 0
@@ -77,74 +76,47 @@ class Strategy:
 
             time.sleep(60)
 
-    def get_latest_candle(client, symbol_token,credentials,refreshToken):
+    def charges_calulation(entry, exit, qnt ,market_type):
+        charges = 0
+        brokerage = 5
+        if market_type == 0:
+            #Brokerage
+            if brokerage > 0.1 * (entry*qnt):
+                charges += 10
+            elif (0.1 * (entry*qnt)) < 20:
+                charges += (0.1 * (entry*qnt)) + (0.1 * (exit*qnt))
+            else:
+                charges += 40
+
+            #Dp charges
+            charges += 20 + (0.18*20)
+            #STT (Gov tax)
+            charges += (0.01*entry) + (0.01*exit)
+            #Stamp duty
+            charges += 0.00015*entry*qnt
+
+            if (exit - entry)*0.0325 > 0:
+                charges += (exit - entry)*0.0325
+            
+            return charges
         
-        now = datetime.now()
-        start = now - timedelta(minutes=60)
+        if market_type == 1:
+            #Brokerage
+            if brokerage > 0.1 * (entry*qnt):
+                charges += 5*2 
+            elif 0.1 * (entry*qnt) < 20:
+                charges += 0.1 * (entry*qnt)
+            else:
+                charges += 20
 
-        params = {
-                "exchange": "NSE",
-                "symboltoken": symbol_token,
-                "interval": "FIFTEEN_MINUTE",
-                "fromdate": start.strftime("%Y-%m-%d %H:%M"),
-                "todate": now.strftime("%Y-%m-%d %H:%M")
-            }
-        try:
-            candles = client.getCandleData(params)
+            #STT
+            #charges += 0.025*exit
+            charges += 0.00003*entry*qnt
+            if ((exit - entry)*qnt)*0.0325 > 0:
+                ((exit - entry)*qnt)*0.0325
 
-            if not candles or not candles.get("data"):
-                raise Exception("Invalid API response")
-
-            return candles["data"][-1], client, refreshToken
-
-        # 🔥 LEVEL 2: Refresh token
-        except Exception as e:
-            print("⚠️ API failed → trying refresh...")
-
-            try:
-                client, refreshToken = Get_data.refresh_session(client, refreshToken)
-
-                candles = client.getCandleData(params)
-
-                if not candles or not candles.get("data"):
-                    raise Exception("Invalid after refresh")
-
-                print("✅ Session refreshed successfully")
-                return candles["data"][-1], client, refreshToken
-
-            # 🔥 LEVEL 3: Full login
-            except Exception as e:
-                print("⚠️ Refresh failed → logging in again...")
-
-                client, refreshToken = Get_data.create_session(credentials)
-
-                candles = client.getCandleData(params)
-
-                print("✅ New session created")
-                return candles["data"][-1], client, refreshToken
-        
-    
-    def check_latest(raw_data_path,client,symbol_token,credentials,refreshToken):
-        raw_data = pd.read_csv(raw_data_path)
-
-        last_candle,client,refreshToken = Strategy.get_latest_candle(client,symbol_token,credentials,refreshToken)
-
-        new_row = pd.DataFrame(
-            [last_candle],
-            columns=["datetime", "open", "high", "low", "close", "volume"]
-        )
-
-        if last_candle[0] == raw_data["datetime"].iloc[-1]:
-            prep_data_path = "data/normal_data/prep_data.csv"
-            return prep_data_path,client
-        else:
-            raw_data = pd.concat([raw_data,new_row],ignore_index=True)
-            raw_data.to_csv("data/normal_data/raw_data.csv")
-            prep_data_path = Data_preparation.preparation("data/normal_data/raw_data.csv")
-                
-            return prep_data_path,client,refreshToken
-
-        
+            return charges
+         
     def load_data(file_name):
         try:
             with open(file_name, "r") as f:
